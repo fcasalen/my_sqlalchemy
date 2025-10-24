@@ -1,0 +1,59 @@
+[project]
+name = "my_sqlalchemy"
+version = "0.1.0"
+description = "A simplified SQLAlchemy wrapper with built-in model validation and database management utilities"
+license = {text = "MIT"}
+readme = "README.md"
+requires-python = ">=3.9,<3.14"
+keywords = ["sqlalchemy", "database", "orm", "sql", "sqlite", "postgresql", "mysql"]
+
+authors = [
+        { name = "Fernando Casale Neto", email = "fcasalen@gmail.com" }
+]
+
+classifiers = [
+        "Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: MIT License",
+        "Topic :: Database",
+        "Topic :: Software Development :: Libraries :: Python Modules",
+        "Topic :: Utilities",
+        "Programming Language :: Python :: 3",
+        "Programming Language :: Python :: 3.9",
+        "Programming Language :: Python :: 3.10",
+        "Programming Language :: Python :: 3.11",
+        "Programming Language :: Python :: 3.12",
+        "Programming Language :: Python :: 3.13",
+        "Operating System :: OS Independent",
+    ]
+
+dependencies = [
+  "sqlalchemy>=2.0.36"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.3.5"
+]
+
+[project.scripts]
+my_sqlalchemy_manager = "my_sqlalchemy.manager:cli"
+
+[project.urls]
+Homepage = "https://github.com/fcasalen/my_sqlalchemy"
+Repository = "https://github.com/fcasalen/my_sqlalchemy.git"
+Issues = "https://github.com/fcasalen/my_sqlalchemy/issues"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.3.5"
+]
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build]
+sources = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
