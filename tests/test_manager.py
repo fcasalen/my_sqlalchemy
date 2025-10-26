@@ -1,11 +1,17 @@
 import os
 import tempfile
-import time
+from sqlalchemy import Column, DateTime, Integer, String
 from unittest.mock import patch
+from sqlalchemy.orm import declarative_base
 
 import pytest
 
 from src.my_sqlalchemy.manager import DatabaseManager
+from src.my_sqlalchemy.standard_model import StandardModel
+from src.my_sqlalchemy.models_handler import ModelsHandler
+from src.my_sqlalchemy.manager import cli
+
+_TestManagerBase = declarative_base()
 
 
 @pytest.fixture
@@ -15,31 +21,27 @@ def temp_db():
         db_path = f.name
     db_url = f"sqlite:///{db_path}"
     yield db_url
-    # Cleanup with retry mechanism for Windows
-    max_retries = 5
-    for i in range(max_retries):
-        try:
-            if os.path.exists(db_path):
-                os.unlink(db_path)
-            break
-        except PermissionError:
-            if i < max_retries - 1:
-                time.sleep(0.1)  # Brief wait before retry
-            else:
-                # If all retries fail, just pass - temp files will be cleaned up by OS
-                pass
+
+
+class MockModel(StandardModel):
+    __tablename__ = "test_table_manager"
+    id = Column(Integer, primary_key=True)
+    name = Column(String(50))
+    created_at = Column(DateTime)
+    updated_at = Column(DateTime)
+    metadata = _TestManagerBase.metadata
 
 
 @pytest.fixture
 def manager(temp_db):
     """Create a DatabaseManager instance with temporary database."""
     manager_instance = DatabaseManager(temp_db)
+    manager_instance.models = ModelsHandler([MockModel])
+    manager_instance.base = _TestManagerBase
+    manager_instance.base.metadata.create_all(manager_instance.engine)
+    manager_instance.add(MockModel, [{"name": "Test Name"}])
     yield manager_instance
-    # Properly close all database connections
-    try:
-        manager_instance.engine.dispose()
-    except Exception:
-        pass
+    manager_instance.engine.dispose()
 
 
 class TestDatabaseManager:
@@ -49,20 +51,28 @@ class TestDatabaseManager:
         assert manager.database_url == temp_db
         assert hasattr(manager, "base")
         assert hasattr(manager, "engine")
+        manager.engine.dispose()
 
-    def test_drop_database_success(self, manager):
+    def test_create_database_success(self, manager: DatabaseManager):
+        """Test successful database creation."""
+        result = manager.create_database()
+        assert result is True
+
+    def test_create_database_failure(self, manager: DatabaseManager):
+        """Test database creation failure."""
+        with patch.object(
+            manager.base.metadata, "create_all", side_effect=Exception("Test error")
+        ):
+            result = manager.create_database()
+            assert result is False
+
+    def test_drop_database_success(self, manager: DatabaseManager):
         """Test successful database drop."""
-        # First create the database
         manager.create_database()
-
-        # Then drop it
         result = manager.drop_database()
         assert result is True
 
-        # Ensure all connections are properly closed
-        manager.engine.dispose()
-
-    def test_drop_database_failure(self, manager):
+    def test_drop_database_failure(self, manager: DatabaseManager):
         """Test database drop failure."""
         with patch.object(
             manager.base.metadata, "drop_all", side_effect=Exception("Test error")
@@ -70,7 +80,7 @@ class TestDatabaseManager:
             result = manager.drop_database()
             assert result is False
 
-    def test_reset_database_success(self, manager):
+    def test_reset_database_success(self, manager: DatabaseManager):
         """Test successful database reset."""
         manager.create_database()
 
@@ -79,37 +89,40 @@ class TestDatabaseManager:
                 manager.reset_database()
                 mock_init.assert_called_once_with(manager.database_url)
 
-        # Clean up connections
-        manager.engine.dispose()
-
-    def test_reset_database_failure(self, manager):
+    def test_reset_database_failure(self, manager: DatabaseManager):
         """Test database reset failure when drop fails."""
         with patch.object(manager, "drop_database", return_value=False):
             result = manager.reset_database()
             assert result is False
 
-    def test_get_database_info(self, manager):
+    def test_get_database_info(self, manager: DatabaseManager):
         """Test getting database information."""
         manager.create_database()
+        assert manager.get_database_info() == {
+            "database_url": manager.database_url,
+            "tables": ["test_table_manager"],
+            "table_counts": {"test_table_manager": 1},
+        }
 
-        info = manager.get_database_info()
-
-        assert "database_url" in info
-        assert "tables" in info
-        assert "table_counts" in info
-        assert info["database_url"] == manager.database_url
-        assert isinstance(info["tables"], list)
-        assert isinstance(info["table_counts"], dict)
-
-        # Clean up connections
-        manager.engine.dispose()
-
-    def test_get_database_info_with_error(self, manager):
+    def test_get_database_info_with_error(self, manager: DatabaseManager):
         """Test get_database_info handles errors gracefully."""
         with patch.object(manager, "get_session", side_effect=Exception("Test error")):
-            info = manager.get_database_info()
-            assert info["tables"] == []
-            assert info["table_counts"] == {}
+            assert manager.get_database_info() == {
+                "database_url": manager.database_url,
+                "tables": [],
+                "table_counts": {},
+            }
+
+    def test_get_database_info_execute_error(self, manager: DatabaseManager):
+        """Test get_database_info handles errors gracefully."""
+        with patch.object(manager, "get_session") as mock_get_session:
+            mock_session = mock_get_session.return_value.__enter__.return_value
+            mock_session.execute.side_effect = Exception("Test error")
+            assert manager.get_database_info() == {
+                "database_url": manager.database_url,
+                "tables": ["test_table_manager"],
+                "table_counts": {"test_table_manager": "Test error"},
+            }
 
     def test_print_database_info(self, manager, capsys):
         """Test printing database information."""
@@ -122,10 +135,7 @@ class TestDatabaseManager:
         assert "Database URL:" in captured.out
         assert "Total Tables:" in captured.out
 
-        # Clean up connections
-        manager.engine.dispose()
-
-    def test_backup_database_sqlite_success(self, manager):
+    def test_backup_database_sqlite_success(self, manager: DatabaseManager):
         """Test successful SQLite database backup."""
         manager.create_database()
 
@@ -137,8 +147,6 @@ class TestDatabaseManager:
             assert result is True
             assert os.path.exists(backup_path)
         finally:
-            # Clean up connections before file cleanup
-            manager.engine.dispose()
             if os.path.exists(backup_path):
                 os.unlink(backup_path)
 
@@ -152,17 +160,15 @@ class TestDatabaseManager:
             result = manager.backup_database()
             assert result is False
 
-    def test_backup_database_error(self, manager):
+    def test_backup_database_error(self, manager: DatabaseManager):
         """Test backup handles file errors."""
         with patch("shutil.copy2", side_effect=Exception("Test error")):
             result = manager.backup_database()
             assert result is False
 
-    def test_restore_database_sqlite_success(self, manager):
+    def test_restore_database_sqlite_success(self, manager: DatabaseManager):
         """Test successful SQLite database restore."""
         manager.create_database()
-
-        # Create a backup first
         with tempfile.NamedTemporaryFile(suffix=".backup", delete=False) as f:
             backup_path = f.name
 
@@ -171,8 +177,6 @@ class TestDatabaseManager:
             result = manager.restore_database(backup_path)
             assert result is True
         finally:
-            # Clean up connections before file cleanup
-            manager.engine.dispose()
             if os.path.exists(backup_path):
                 os.unlink(backup_path)
 
@@ -186,21 +190,18 @@ class TestDatabaseManager:
             result = manager.restore_database("backup.db")
             assert result is False
 
-    def test_restore_database_error(self, manager):
+    def test_restore_database_error(self, manager: DatabaseManager):
         """Test restore handles file errors."""
         with patch("shutil.copy2", side_effect=Exception("Test error")):
             result = manager.restore_database("nonexistent.backup")
             assert result is False
 
-    def test_vacuum_database_sqlite_success(self, manager):
+    def test_vacuum_database_sqlite_success(self, manager: DatabaseManager):
         """Test successful SQLite database vacuum."""
         manager.create_database()
 
         result = manager.vacuum_database()
         assert result is True
-
-        # Clean up connections
-        manager.engine.dispose()
 
     def test_vacuum_database_non_sqlite(self):
         """Test vacuum fails for non-SQLite databases."""
@@ -212,8 +213,144 @@ class TestDatabaseManager:
             result = manager.vacuum_database()
             assert result is False
 
-    def test_vacuum_database_error(self, manager):
+    def test_vacuum_database_error(self, manager: DatabaseManager):
         """Test vacuum handles database errors."""
         with patch("sqlite3.connect", side_effect=Exception("Test error")):
             result = manager.vacuum_database()
             assert result is False
+
+
+class TestDatabaseManagerCLI:
+    def test_cli_no_command(self, capsys):
+        """Test CLI with no command shows help."""
+        with patch("sys.argv", ["cli"]):
+            cli()
+            captured = capsys.readouterr()
+            assert "My SQLAlchemy Database Manager" in captured.out
+
+    def test_cli_create_command(self, temp_db):
+        """Test CLI create command."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "create"]):
+            with patch(
+                "src.my_sqlalchemy.manager.DatabaseManager.create_database",
+                return_value=True,
+            ) as mock_create:
+                cli()
+                mock_create.assert_called_once()
+
+    def test_cli_drop_command_confirmed(self, temp_db):
+        """Test CLI drop command with confirmation."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "drop"]):
+            with patch("builtins.input", return_value="y"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.drop_database",
+                    return_value=True,
+                ) as mock_drop:
+                    cli()
+                    mock_drop.assert_called_once()
+
+    def test_cli_drop_command_cancelled(self, temp_db, capsys):
+        """Test CLI drop command cancelled."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "drop"]):
+            with patch("builtins.input", return_value="n"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.drop_database"
+                ) as mock_drop:
+                    cli()
+                    mock_drop.assert_not_called()
+                    captured = capsys.readouterr()
+                    assert "Operation cancelled" in captured.out
+
+    def test_cli_reset_command_confirmed(self, temp_db):
+        """Test CLI reset command with confirmation."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "reset"]):
+            with patch("builtins.input", return_value="y"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.reset_database",
+                    return_value=True,
+                ) as mock_reset:
+                    cli()
+                    mock_reset.assert_called_once()
+
+    def test_cli_reset_command_cancelled(self, temp_db, capsys):
+        """Test CLI reset command cancelled."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "reset"]):
+            with patch("builtins.input", return_value="n"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.reset_database"
+                ) as mock_reset:
+                    cli()
+                    mock_reset.assert_not_called()
+                    captured = capsys.readouterr()
+                    assert "Operation cancelled" in captured.out
+
+    def test_cli_info_command(self, temp_db):
+        """Test CLI info command."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "info"]):
+            with patch(
+                "src.my_sqlalchemy.manager.DatabaseManager.print_database_info"
+            ) as mock_info:
+                cli()
+                mock_info.assert_called_once()
+
+    def test_cli_backup_command_with_path(self, temp_db):
+        """Test CLI backup command with path."""
+        with patch(
+            "sys.argv", ["cli", "--db-url", temp_db, "backup", "--path", "test.backup"]
+        ):
+            with patch(
+                "src.my_sqlalchemy.manager.DatabaseManager.backup_database",
+                return_value=True,
+            ) as mock_backup:
+                cli()
+                mock_backup.assert_called_once_with("test.backup")
+
+    def test_cli_backup_command_without_path(self, temp_db):
+        """Test CLI backup command without path."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "backup"]):
+            with patch(
+                "src.my_sqlalchemy.manager.DatabaseManager.backup_database",
+                return_value=True,
+            ) as mock_backup:
+                cli()
+                mock_backup.assert_called_once_with(None)
+
+    def test_cli_restore_command_confirmed(self, temp_db):
+        """Test CLI restore command with confirmation."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "restore", "test.backup"]):
+            with patch("builtins.input", return_value="y"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.restore_database",
+                    return_value=True,
+                ) as mock_restore:
+                    cli()
+                    mock_restore.assert_called_once_with("test.backup")
+
+    def test_cli_restore_command_cancelled(self, temp_db, capsys):
+        """Test CLI restore command cancelled."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "restore", "test.backup"]):
+            with patch("builtins.input", return_value="n"):
+                with patch(
+                    "src.my_sqlalchemy.manager.DatabaseManager.restore_database"
+                ) as mock_restore:
+                    cli()
+                    mock_restore.assert_not_called()
+                    captured = capsys.readouterr()
+                    assert "Operation cancelled" in captured.out
+
+    def test_cli_vacuum_command(self, temp_db):
+        """Test CLI vacuum command."""
+        with patch("sys.argv", ["cli", "--db-url", temp_db, "vacuum"]):
+            with patch(
+                "src.my_sqlalchemy.manager.DatabaseManager.vacuum_database",
+                return_value=True,
+            ) as mock_vacuum:
+                cli()
+                mock_vacuum.assert_called_once()
+
+    def test_cli_default_database_url(self):
+        """Test CLI uses default database URL when not specified."""
+        with patch("sys.argv", ["cli", "create"]):
+            with patch("src.my_sqlalchemy.manager.DatabaseManager") as mock_manager:
+                cli()
+                mock_manager.assert_called_once_with("sqlite:///my_sqlalchemy.db")

@@ -1,4 +1,3 @@
-import re
 import uuid
 
 import pytest
@@ -8,7 +7,6 @@ from sqlalchemy.orm import declarative_base
 from src.my_sqlalchemy.models_handler import ModelsHandler
 from src.my_sqlalchemy.standard_model import StandardModel
 
-# Create a separate base for this test module to avoid conflicts
 _TestBase = declarative_base()
 
 
@@ -53,6 +51,11 @@ class TestModelsHandler:
         with pytest.raises(ValueError, match="models_list cannot be empty"):
             ModelsHandler(models_list=[])
 
+    def test_models_list_invalid(self):
+        """Test initialization models_list invalid"""
+        with pytest.raises(TypeError, match="models_list must be a list"):
+            ModelsHandler(models_list=1)
+
     def test_multiple_valid_models(self):
         """Test initialization with multiple valid models"""
 
@@ -69,12 +72,18 @@ class TestModelsHandler:
 
     def test_model_validator_with_invalid_data_structure(self):
         """Test model validator with invalid data structure"""
-        # The validator checks for 'oxe' key instead of 'models_list' due to the bug
         invalid_data = {"oxe": [InvalidModel]}
-        with pytest.raises(
-            ValueError,
-            match=re.escape(
-                "1 validation error for ModelsHandler\nmodels_list\n  Field required [type=missing"
-            ),
-        ):
+        with pytest.raises(ValueError, match="models_list key is required in data"):
             ModelsHandler.model_validate(invalid_data)
+
+    def test_model_validator_with_invalid_data(self):
+        """Test model validator with invalid data"""
+        with pytest.raises(TypeError, match="Data must be a dictionary"):
+            ModelsHandler.model_validate(1)
+
+    def test_model_validator_with_valid_data_structure(self):
+        """Test model validator with invalid data structure"""
+        invalid_data = {"models_list": [ValidModel]}
+        assert ModelsHandler.model_validate(invalid_data) == ModelsHandler(
+            models_list=[ValidModel]
+        )
