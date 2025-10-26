@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import create_engine, delete, func, select, update
-from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.sql.selectable import Select
 
@@ -37,7 +37,12 @@ class MySQLAlchemy:
 
     @contextmanager
     def get_session(self):
-        """Context manager for database sessions."""
+        """Context manager for database sessions.
+        It yields a session and ensures commit/rollback and closure.
+
+        Yields:
+            Session: A SQLAlchemy session object.
+        """
         session = self.SessionLocal()
         try:
             yield session
@@ -48,31 +53,6 @@ class MySQLAlchemy:
         finally:
             session.close()
 
-    def _expunge_object(self, session: Session, obj: Any) -> Any:
-        """Helper to expunge single object from session."""
-        if obj:
-            # Force loading of lazy-loaded attributes
-            self._force_load_attributes(obj)
-            session.expunge(obj)
-        return obj
-
-    def _expunge_objects(self, session: Session, objects: list) -> list:
-        """Helper to expunge list of objects from session."""
-        for obj in objects:
-            self._force_load_attributes(obj)
-            session.expunge(obj)
-        return objects
-
-    def _force_load_attributes(self, obj: Any) -> None:
-        """Force loading of commonly accessed attributes to prevent lazy loading issues."""
-        # This is a generic implementation - subclasses can override for specific entities
-        try:
-            _ = getattr(obj, "id", None)
-            _ = getattr(obj, "created_at", None)
-            _ = getattr(obj, "updated_at", None)
-        except Exception:
-            pass
-
     def _assert_model(self, model) -> None:
         """Assert that the provided model is valid.
 
@@ -80,7 +60,7 @@ class MySQLAlchemy:
             model (DeclarativeMeta): The model class to validate
 
         Raises:
-            UnmappedError: If the provided model is not mapped.
+            AssertionError: If the provided model is not mapped.
         """
         assert model in self.models.models_list, (
             f"The model {model} is not mapped. Valid models are: {self.models.models_list_names}.\n\n"
@@ -90,12 +70,22 @@ class MySQLAlchemy:
     def _construct_where_clause(
         self, stmt: Select, model: DeclarativeMeta, query_kwargs: dict
     ) -> Select:
+        """Construct the where clause to be used in a select
+
+        Args:
+            stmt (Select): The initial select statement
+            model (DeclarativeMeta): The model class to build the where clause for
+            query_kwargs (dict): The filter criteria as column-value pairs
+
+        Returns:
+            Select: The select statement with the constructed where clause
+        """
         for column_name, value in query_kwargs.items():
             column = getattr(model, column_name)
             stmt = stmt.where(column == value)
         return stmt
 
-    def add(self, model: DeclarativeMeta, data: list[dict]) -> dict:
+    def add(self, model: DeclarativeMeta, data: list[dict]) -> dict[str, Any]:
         """add one or more entities.
 
         Args:
@@ -103,15 +93,20 @@ class MySQLAlchemy:
             data (list[dict]): List of dictionaries with column-value mappings for bulk creation. Use self.models.<model_name>.get_columns() to check valid columns.
 
         Raises:
-            UnmappedError: If the provided model is not mapped.
-            TypeError: If invalid columns are provided in the data dictionaries.
+            AssertionError: If the provided model is not mapped.
+
+        Returns:
+            dict[str, Any]: A dictionary indicating success or failure. In case of failure, includes an error message.
         """
         self._assert_model(model)
-        with self.get_session() as session:
-            new_entities = [model(**item_data) for item_data in data]
-            session.add_all(new_entities)
-            session.flush()
-        print("✅Data added successfully.")
+        try:
+            with self.get_session() as session:
+                new_entities = [model(**item_data) for item_data in data]
+                session.add_all(new_entities)
+                session.flush()
+                return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def delete(self, model: DeclarativeMeta, **query_kwargs) -> int:
         """Delete an entity. To be implemented by subclasses.
@@ -128,28 +123,42 @@ class MySQLAlchemy:
         stmt = self._construct_where_clause(stmt, model, query_kwargs)
         with self.get_session() as session:
             result = session.execute(stmt)
-            session.commit()
             return result.rowcount
 
-    def get(self, model, limit: int = None, **query_kwargs) -> list[dict]:
+    def get(
+        self,
+        model,
+        limit: int = None,
+        columns_to_return: list[str] = None,
+        **query_kwargs,
+    ) -> list[dict]:
         """Find an entity. To be implemented by subclasses.
 
         Args:
             model: The model class to search in. Use self.models.all_models() method to check valid models.
             limit (int, optional): Maximum number of results to return. Defaults to None (no limit).
+            columns_to_return (list[str], optional): List of column names to return. Defaults to None (all columns).
             **query_kwargs: Filter criteria for finding. Use self.models.<model_name>.get_columns() to check valid columns.
 
         Returns:
             list[dict]: List of found entity instances (dictionaries).
         """
         self._assert_model(model)
-        stmt = select(model)
+
+        if columns_to_return is None:
+            columns_to_return = model.get_columns_type().keys()
+
+        columns = [getattr(model, col) for col in columns_to_return]
+        stmt = select(*columns)
         stmt = self._construct_where_clause(stmt, model, query_kwargs)
+
         with self.get_session() as session:
             if limit:
                 stmt = stmt.limit(limit)
-            result = session.execute(stmt).scalars().all()
-            return self._expunge_objects(session, result)
+
+            result = session.execute(stmt)
+            rows = result.all()
+            return [dict(zip(columns_to_return, row)) for row in rows]
 
     def update(self, model, data_to_be_updated: dict, **query_kwargs) -> int:
         """Update an entity. To be implemented by subclasses.
@@ -169,7 +178,6 @@ class MySQLAlchemy:
         stmt = stmt.values(**data_to_be_updated)
         with self.get_session() as session:
             result = session.execute(stmt)
-            session.commit()
             return result.rowcount
 
     def count(self, model, **query_kwargs) -> int:
