@@ -121,6 +121,20 @@ class TestGet:
             {"id": 2, "name": "test2", "created_at": None, "updated_at": None},
         ]
 
+    def test_get_simple_ordered_by_asc(self, mysql_alchemy: MySQLAlchemy):
+        results = mysql_alchemy.get(MockModel, columns_to_order_by={"name": True})
+        assert results == [
+            {"id": 1, "name": "test1", "created_at": None, "updated_at": None},
+            {"id": 2, "name": "test2", "created_at": None, "updated_at": None},
+        ]
+
+    def test_get_simple_ordered_by_desc(self, mysql_alchemy: MySQLAlchemy):
+        results = mysql_alchemy.get(MockModel, columns_to_order_by={"name": False})
+        assert results == [
+            {"id": 2, "name": "test2", "created_at": None, "updated_at": None},
+            {"id": 1, "name": "test1", "created_at": None, "updated_at": None},
+        ]
+
     def test_get_by_columns(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(MockModel, name="test1")
         assert results == [

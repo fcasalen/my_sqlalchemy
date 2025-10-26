@@ -1,7 +1,7 @@
 from contextlib import contextmanager
 from typing import Any
 
-from sqlalchemy import create_engine, delete, func, select, update
+from sqlalchemy import create_engine, delete, func, select, update, asc, desc
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.sql.selectable import Select
@@ -130,6 +130,7 @@ class MySQLAlchemy:
         model,
         limit: int = None,
         columns_to_return: list[str] = None,
+        columns_to_order_by: dict[str, bool] = None,
         **query_kwargs,
     ) -> list[dict]:
         """Find an entity. To be implemented by subclasses.
@@ -138,6 +139,7 @@ class MySQLAlchemy:
             model: The model class to search in. Use self.models.all_models() method to check valid models.
             limit (int, optional): Maximum number of results to return. Defaults to None (no limit).
             columns_to_return (list[str], optional): List of column names to return. Defaults to None (all columns).
+            columns_to_order_by (dict[str, bool], optional): Dictionary of column names to order the results by and a boolean indicating ascending (True) or descending (False) order. Defaults to None (no specific order).
             **query_kwargs: Filter criteria for finding. Use self.models.<model_name>.get_columns() to check valid columns.
 
         Returns:
@@ -151,11 +153,15 @@ class MySQLAlchemy:
         columns = [getattr(model, col) for col in columns_to_return]
         stmt = select(*columns)
         stmt = self._construct_where_clause(stmt, model, query_kwargs)
-
+        if limit:
+            stmt = stmt.limit(limit)
+        if columns_to_order_by:
+            order_by_columns = [
+                asc(getattr(model, col)) if asc_desc else desc(getattr(model, col))
+                for col, asc_desc in columns_to_order_by.items()
+            ]
+            stmt = stmt.order_by(*order_by_columns)
         with self.get_session() as session:
-            if limit:
-                stmt = stmt.limit(limit)
-
             result = session.execute(stmt)
             rows = result.all()
             return [dict(zip(columns_to_return, row)) for row in rows]
