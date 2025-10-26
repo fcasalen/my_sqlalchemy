@@ -56,11 +56,10 @@ class DatabaseManager(MySQLAlchemy):
                         )
                         count = result.scalar()
                         info["table_counts"][table_name] = count
-                    except Exception:
-                        info["table_counts"][table_name] = "Error"
+                    except Exception as e:
+                        info["table_counts"][table_name] = str(e)
         except Exception as e:
             print(f"❌ Error getting database info: {e}")
-            # Reset to empty values when any error occurs
             info["tables"] = []
             info["table_counts"] = {}
         return info
@@ -184,3 +183,4 @@ def cli():
             print("❌ Operation cancelled")
     elif args.command == "vacuum":
         manager.vacuum_database()
+    manager.engine.dispose()
