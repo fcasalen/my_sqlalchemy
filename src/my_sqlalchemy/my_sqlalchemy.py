@@ -107,25 +107,28 @@ class MySQLAlchemy:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def add_model_instance(self, model_instance: DeclarativeMeta) -> dict[str, Any]:
-        """Add a single model instance.
+    def add_model_instances(
+        self, model_instances: list[DeclarativeMeta]
+    ) -> dict[str, Any]:
+        """Add model instances.
 
         Args:
-            model_instance (DeclarativeMeta): The model instance to add.
+            model_instance (list[DeclarativeMeta]): The model instances to add.
 
         Raises:
-            AssertionError: If the model instance already has a primary key (id) set.
+            AssertionError: If any model instance already has a primary key (id) set.
 
         Returns:
             dict[str, Any]: A dictionary indicating success or failure. In case of failure, includes an error message.
         """
-        self._assert_model(type(model_instance))
-        assert not model_instance.id, (
-            "Model instance must not have a primary key (id) set when adding a new instance."
-        )
+        for model_instance in model_instances:
+            self._assert_model(type(model_instance))
+            assert not model_instance.id, (
+                "Model instance must not have a primary key (id) set when adding a new instance."
+            )
         try:
             with self.get_session() as session:
-                session.add(model_instance)
+                session.add_all(model_instances)
                 return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -235,7 +238,7 @@ class MySQLAlchemy:
             "Model instance must have a valid primary key (id) to be updated."
         )
         assert self.get(type(model_instance), id=model_instance.id), (
-            "Model instance does not exist. Use add_model_instance to add new instances."
+            "Model instance does not exist. Use add_model_instances to add new instances."
         )
         try:
             with self.get_session() as session:

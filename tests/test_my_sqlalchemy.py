@@ -231,9 +231,9 @@ class TestAdd:
             "error": "'email' is an invalid keyword argument for MockModel",
         }
 
-    def test_add_model_instance(self, mysql_alchemy: MySQLAlchemy):
+    def test_add_model_instances(self, mysql_alchemy: MySQLAlchemy):
         new_instance = MockModel(name="test3")
-        result = mysql_alchemy.add_model_instance(new_instance)
+        result = mysql_alchemy.add_model_instances([new_instance])
         assert result == {"success": True}
         results = mysql_alchemy.get(MockModel)
         assert results == [
@@ -242,7 +242,7 @@ class TestAdd:
             {"id": 3, "name": "test3", "created_at": None, "updated_at": None},
         ]
 
-    def test_add_model_instance_invalid_update(self, mysql_alchemy: MySQLAlchemy):
+    def test_add_model_instances_invalid_update(self, mysql_alchemy: MySQLAlchemy):
         new_instance = MockModel(id=1, name="test3")
         with pytest.raises(
             AssertionError,
@@ -250,9 +250,9 @@ class TestAdd:
                 "Model instance must not have a primary key (id) set when adding a new instance."
             ),
         ):
-            mysql_alchemy.add_model_instance(new_instance)
+            mysql_alchemy.add_model_instances([new_instance])
 
-    def test_add_model_instance_session_error(self, mysql_alchemy: MySQLAlchemy):
+    def test_add_model_instances_session_error(self, mysql_alchemy: MySQLAlchemy):
         new_instance = MockModel(name="test3")
         with (
             patch.object(mysql_alchemy, "get_session") as mock_get_session,
@@ -260,9 +260,9 @@ class TestAdd:
         ):
             mock_get.return_value = False
             mock_session = Mock()
-            mock_session.add.side_effect = Exception("Add error")
+            mock_session.add_all.side_effect = Exception("Add error")
             mock_get_session.return_value.__enter__.return_value = mock_session
-            assert mysql_alchemy.add_model_instance(new_instance) == {
+            assert mysql_alchemy.add_model_instances([new_instance]) == {
                 "success": False,
                 "error": "Add error",
             }
@@ -300,7 +300,7 @@ class TestUpdate:
         to_update.id = 999
         with pytest.raises(
             AssertionError,
-            match="Model instance does not exist. Use add_model_instance to add new instances.",
+            match="Model instance does not exist. Use add_model_instances to add new instances.",
         ):
             mysql_alchemy.update_model_instance(to_update)
 
