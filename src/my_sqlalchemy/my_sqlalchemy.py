@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import create_engine, delete, func, select, update, asc, desc
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, make_transient
 from sqlalchemy.orm.decl_api import DeclarativeMeta
 from sqlalchemy.sql.selectable import Select
 
@@ -103,7 +103,29 @@ class MySQLAlchemy:
             with self.get_session() as session:
                 new_entities = [model(**item_data) for item_data in data]
                 session.add_all(new_entities)
-                session.flush()
+                return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
+    def add_model_instance(self, model_instance: DeclarativeMeta) -> dict[str, Any]:
+        """Add a single model instance.
+
+        Args:
+            model_instance (DeclarativeMeta): The model instance to add.
+
+        Raises:
+            AssertionError: If the model instance already has a primary key (id) set.
+
+        Returns:
+            dict[str, Any]: A dictionary indicating success or failure. In case of failure, includes an error message.
+        """
+        self._assert_model(type(model_instance))
+        assert not model_instance.id, (
+            "Model instance must not have a primary key (id) set when adding a new instance."
+        )
+        try:
+            with self.get_session() as session:
+                session.add(model_instance)
                 return {"success": True}
         except Exception as e:
             return {"success": False, "error": str(e)}
@@ -131,6 +153,7 @@ class MySQLAlchemy:
         limit: int = None,
         columns_to_return: list[str] = None,
         columns_to_order_by: dict[str, bool] = None,
+        return_objects: bool = False,
         **query_kwargs,
     ) -> list[dict]:
         """Find an entity. To be implemented by subclasses.
@@ -140,6 +163,7 @@ class MySQLAlchemy:
             limit (int, optional): Maximum number of results to return. Defaults to None (no limit).
             columns_to_return (list[str], optional): List of column names to return. Defaults to None (all columns).
             columns_to_order_by (dict[str, bool], optional): Dictionary of column names to order the results by and a boolean indicating ascending (True) or descending (False) order. Defaults to None (no specific order).
+            return_objects (bool, optional): Whether to return ORM objects instead of dictionaries. Defaults to False.
             **query_kwargs: Filter criteria for finding. Use self.models.<model_name>.get_columns() to check valid columns.
 
         Returns:
@@ -149,9 +173,12 @@ class MySQLAlchemy:
 
         if columns_to_return is None:
             columns_to_return = model.get_columns_type().keys()
+        if not return_objects:
+            columns = [getattr(model, col) for col in columns_to_return]
+            stmt = select(*columns)
+        else:
+            stmt = select(model)
 
-        columns = [getattr(model, col) for col in columns_to_return]
-        stmt = select(*columns)
         stmt = self._construct_where_clause(stmt, model, query_kwargs)
         if limit:
             stmt = stmt.limit(limit)
@@ -163,11 +190,16 @@ class MySQLAlchemy:
             stmt = stmt.order_by(*order_by_columns)
         with self.get_session() as session:
             result = session.execute(stmt)
+            if return_objects:
+                rows = result.scalars().all()
+                for row in rows:
+                    make_transient(row)
+                return rows
             rows = result.all()
             return [dict(zip(columns_to_return, row)) for row in rows]
 
     def update(self, model, data_to_be_updated: dict, **query_kwargs) -> int:
-        """Update an entity. To be implemented by subclasses.
+        """Update entities matching criteria.
 
         Args:
             model: The model class to update. Use self.models.all_models() method to check valid models.
@@ -185,6 +217,33 @@ class MySQLAlchemy:
         with self.get_session() as session:
             result = session.execute(stmt)
             return result.rowcount
+
+    def update_model_instance(self, model_instance: DeclarativeMeta) -> dict[str, Any]:
+        """Update a single model instance.
+
+        Args:
+            model_instance (DeclarativeMeta): The model instance to update.
+
+        Raises:
+            AssertionError: If the model instance does not have a valid primary key (id) or does not exist in the database.
+
+        Returns:
+            dict[str, Any]: A dictionary indicating success or failure. In case of failure, includes an error message.
+        """
+        self._assert_model(type(model_instance))
+        assert model_instance.id, (
+            "Model instance must have a valid primary key (id) to be updated."
+        )
+        assert self.get(type(model_instance), id=model_instance.id), (
+            "Model instance does not exist. Use add_model_instance to add new instances."
+        )
+        try:
+            with self.get_session() as session:
+                model_instance.updated_at = utils.utc_now()
+                session.merge(model_instance)
+                return {"success": True}
+        except Exception as e:
+            return {"success": False, "error": str(e)}
 
     def count(self, model, **query_kwargs) -> int:
         """Count entities matching criteria.
