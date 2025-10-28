@@ -93,6 +93,12 @@ class TestStandardModel:
 
     def test_get_columns_method(self, concrete_model):
         assert concrete_model.get_columns() == {
+            "id": {
+                "default": None,
+                "length": None,
+                "nullable": False,
+                "type": "INTEGER",
+            },
             "created_at": {
                 "default": "function utc_now",
                 "length": None,
@@ -111,14 +117,6 @@ class TestStandardModel:
                 "nullable": False,
                 "type": "DATETIME",
             },
-        }
-
-    def test_get_columns_type_method(self, concrete_model):
-        assert concrete_model.get_columns_type() == {
-            "created_at": "DATETIME",
-            "id": "INTEGER",
-            "name": "VARCHAR(50)",
-            "updated_at": "DATETIME",
         }
 
     def test_updated_at_changes_on_update(self, concrete_model, session, test_base):

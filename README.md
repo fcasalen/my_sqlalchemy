@@ -45,7 +45,11 @@ users_data = [
 ]
 db.add(User, users_data)
 
-# Query data
+# Add data using model instances (support relationships)
+user_instance = User(name="Charlie", email="charlie@example.com")
+db.add(User, [user_instance])
+
+# Query data (doesn't support relationships)
 all_users = db.get(User)
 specific_user = db.get(User, name="Alice")
 limited_results = db.get(User, limit=5)
@@ -59,6 +63,43 @@ updated_rows = db.update(User, {"email": "alice.new@example.com"}, name="Alice")
 
 # Delete data
 deleted_rows = db.delete(User, name="Bob")
+
+# Select
+select = db.select(User)
+
+# Where clause
+select = db.construct_where_clause(select, User, {"name": "Charlie"})
+
+# Ascending/Descending
+asc = db.asc(User.name)
+desc = db.desc(User.created_at)
+```
+
+### Assertions
+
+Methods get, add, add_model_instances, update, delete, and count perform model and column assertions to ensure data integrity.
+
+Methods select, asc, desc, construct_where_clause can optionally perform model and column assertions (default True).
+
+### get_session() Context Manager
+
+You can also use the `get_session()` method to work directly with SQLAlchemy sessions. It yields a session object that you can use within a `with` block. The session is automatically committed if no exceptions occur, or rolled back if an exception is raised.
+
+```python
+with db.get_session() as session:
+    new_user = User(name="David", email="david@example.com")
+    session.add(new_user)
+```
+
+### SQLAlchemy methods and classes
+
+You can also access the underlying SQLAlchemy methods and classes
+
+```python
+from sqlalchemy import func
+with db.get_session() as session:
+    user = session.query(User).filter(func.lower(User.email) == "charlie@example.com").first()
+    print(user.email)
 ```
 
 ### Using the Database Manager
@@ -154,18 +195,12 @@ Base model class with common fields and utilities.
 #### Methods
 
 ##### `get_columns()`
-Get column details as a dictionary.
+Get column details as a dictionary, optionally excluding the primary key.
 
 ```python
-columns = User.get_columns()
+columns = User.get_columns(exclude_primary_key=True)
 ```
 
-##### `get_columns_type()`
-Get column types as a dictionary.
-
-```python
-column_types = User.get_columns_type()
-```
 
 ## Project Structure
 

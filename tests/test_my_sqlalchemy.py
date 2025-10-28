@@ -58,7 +58,7 @@ def mock_session():
     return session
 
 
-class TestInit:
+class TestGeneral:
     def test_init(self, test_models):
         db = MySQLAlchemy("sqlite:///:memory:", test_models)
         assert db.database_url == "sqlite:///:memory:"
@@ -79,6 +79,39 @@ class TestInit:
             ),
         ):
             mysql_alchemy._assert_model(InvalidModel)
+
+    def test_assert_columns_in_model(self, mysql_alchemy: MySQLAlchemy):
+        mysql_alchemy._assert_columns_in_model(MockModel, ["name"])
+        with pytest.raises(
+            AssertionError,
+            match=re.escape(
+                "Primary key column 'id' cannot be included in this operation."
+            ),
+        ):
+            mysql_alchemy._assert_columns_in_model(
+                MockModel,
+                ["id", "name"],
+                exclude_primary_key=True,
+                msg=" in this operation.",
+            )
+
+    def test_select(self, mysql_alchemy: MySQLAlchemy):
+        stmt = mysql_alchemy.select(MockModel)
+        assert str(stmt) == str(select(MockModel))
+
+        stmt = mysql_alchemy.select(MockModel, columns_to_select=["name", "id"])
+        expected_stmt = select(getattr(MockModel, "name"), getattr(MockModel, "id"))
+        assert str(stmt) == str(expected_stmt)
+
+    def test_asc(self, mysql_alchemy: MySQLAlchemy):
+        asc_expr = mysql_alchemy.asc(MockModel, "name")
+        expected_expr = getattr(MockModel, "name").asc()
+        assert str(asc_expr) == str(expected_expr)
+
+    def test_desc(self, mysql_alchemy: MySQLAlchemy):
+        desc_expr = mysql_alchemy.desc(MockModel, "name")
+        expected_expr = getattr(MockModel, "name").desc()
+        assert str(desc_expr) == str(expected_expr)
 
 
 class TestGetSession:
@@ -121,16 +154,6 @@ class TestGet:
             {"id": 2, "name": "test2", "created_at": None, "updated_at": None},
         ]
 
-    def test_get_simple_return_obj(self, mysql_alchemy: MySQLAlchemy):
-        results = mysql_alchemy.get(MockModel, return_objects=True)
-        expected = [
-            MockModel(id=1, name="test1", created_at=None, updated_at=None),
-            MockModel(id=2, name="test2", created_at=None, updated_at=None),
-        ]
-        for result, expected in zip(results, expected):
-            for column in MockModel.columns():
-                assert getattr(result, column) == getattr(expected, column)
-
     def test_get_simple_ordered_by_asc(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(MockModel, columns_to_order_by={"name": True})
         assert results == [
@@ -167,11 +190,11 @@ class TestGet:
 
 
 class TestConstructWhereClause:
-    def test_construct_where_clause(self, mysql_alchemy):
+    def testconstruct_where_clause(self, mysql_alchemy):
         stmt = select(MockModel)
         query_kwargs = {"name": "test", "id": 1}
 
-        result = mysql_alchemy._construct_where_clause(stmt, MockModel, query_kwargs)
+        result = mysql_alchemy.construct_where_clause(stmt, MockModel, query_kwargs)
 
         assert result is not None
 
@@ -224,16 +247,27 @@ class TestAdd:
             ]
 
     def test_add_wrong_column(self, mysql_alchemy: MySQLAlchemy):
-        assert mysql_alchemy.add(
-            MockModel, [{"email": "test3"}, {"name": "test4"}]
-        ) == {
-            "success": False,
-            "error": "'email' is an invalid keyword argument for MockModel",
-        }
+        with pytest.raises(
+            AssertionError,
+            match=re.escape(
+                "Invalid columns ['email'] for model 'MockModel'. Valid columns are: ['name', 'created_at', 'updated_at']"
+            ),
+        ):
+            mysql_alchemy.add(MockModel, [{"email": "test3"}, {"name": "test4"}])
+
+    def test_add_session_error(self, mysql_alchemy: MySQLAlchemy):
+        with patch.object(mysql_alchemy, "get_session") as mock_get_session:
+            mock_session = Mock()
+            mock_session.add_all.side_effect = Exception("Add error")
+            mock_get_session.return_value.__enter__.return_value = mock_session
+            assert mysql_alchemy.add(MockModel, [{"name": "test3"}]) == {
+                "success": False,
+                "error": "Add error",
+            }
 
     def test_add_model_instances(self, mysql_alchemy: MySQLAlchemy):
         new_instance = MockModel(name="test3")
-        result = mysql_alchemy.add_model_instances([new_instance])
+        result = mysql_alchemy.add(MockModel, [new_instance])
         assert result == {"success": True}
         results = mysql_alchemy.get(MockModel)
         assert results == [
@@ -242,84 +276,31 @@ class TestAdd:
             {"id": 3, "name": "test3", "created_at": None, "updated_at": None},
         ]
 
-    def test_add_model_instances_invalid_update(self, mysql_alchemy: MySQLAlchemy):
+    def test_add_invalid_model_instance(self, mysql_alchemy: MySQLAlchemy):
+        class AnotherModel(StandardModel):
+            __tablename__ = "another_table"
+            id = Column(Integer, primary_key=True)
+            name = Column(String(100))
+
+        new_instance = AnotherModel(name="test3")
+        with pytest.raises(
+            AssertionError,
+            match=re.escape(
+                "The data in position 0 is invalid (AnotherModel). It must be a dict or a MockModel."
+            ),
+        ):
+            mysql_alchemy.add(MockModel, [new_instance])
+
+    def test_add_model_instances_invalid_primary_key(self, mysql_alchemy: MySQLAlchemy):
         new_instance = MockModel(id=1, name="test3")
         with pytest.raises(
             AssertionError,
-            match=re.escape(
-                "Model instance must not have a primary key (id) set when adding a new instance."
-            ),
+            match="Primary key column 'id' cannot be included when adding new instances.",
         ):
-            mysql_alchemy.add_model_instances([new_instance])
-
-    def test_add_model_instances_session_error(self, mysql_alchemy: MySQLAlchemy):
-        new_instance = MockModel(name="test3")
-        with (
-            patch.object(mysql_alchemy, "get_session") as mock_get_session,
-            patch.object(mysql_alchemy, "get") as mock_get,
-        ):
-            mock_get.return_value = False
-            mock_session = Mock()
-            mock_session.add_all.side_effect = Exception("Add error")
-            mock_get_session.return_value.__enter__.return_value = mock_session
-            assert mysql_alchemy.add_model_instances([new_instance]) == {
-                "success": False,
-                "error": "Add error",
-            }
+            mysql_alchemy.add(MockModel, [new_instance])
 
 
 class TestUpdate:
-    def test_update_model_instance(self, mysql_alchemy: MySQLAlchemy):
-        to_update = mysql_alchemy.get(MockModel, return_objects=True, id=1)[0]
-        to_update.name = "test1_updated"
-        mysql_alchemy.update_model_instance(to_update)
-        results = mysql_alchemy.get(MockModel)
-        assert results == [
-            {
-                "id": 1,
-                "name": "test1_updated",
-                "created_at": None,
-                "updated_at": results[0]["updated_at"],
-            },
-            {"id": 2, "name": "test2", "created_at": None, "updated_at": None},
-        ]
-
-    def test_update_model_instance_no_id(self, mysql_alchemy: MySQLAlchemy):
-        to_update = MockModel(name="test1_updated")
-        with pytest.raises(
-            AssertionError,
-            match=re.escape(
-                "Model instance must have a valid primary key (id) to be updated."
-            ),
-        ):
-            mysql_alchemy.update_model_instance(to_update)
-
-    def test_update_model_instance_invalid_update(self, mysql_alchemy: MySQLAlchemy):
-        to_update = mysql_alchemy.get(MockModel, return_objects=True, id=1)[0]
-        to_update.name = "test1_updated"
-        to_update.id = 999
-        with pytest.raises(
-            AssertionError,
-            match="Model instance does not exist. Use add_model_instances to add new instances.",
-        ):
-            mysql_alchemy.update_model_instance(to_update)
-
-    def test_update_model_instance_session_error(self, mysql_alchemy: MySQLAlchemy):
-        to_update = mysql_alchemy.get(MockModel, return_objects=True, id=1)[0]
-        to_update.name = "test1_updated"
-        with (
-            patch.object(mysql_alchemy, "get_session") as mock_get_session,
-            patch.object(mysql_alchemy, "get") as mock_get,
-        ):
-            mock_get.return_value = True
-            mock_session = Mock()
-            mock_session.merge.side_effect = Exception("Merge error")
-            mock_get_session.return_value.__enter__.return_value = mock_session
-            assert mysql_alchemy.update_model_instance(to_update) == {
-                "success": False,
-                "error": "Merge error",
-            }
-
     def test_update_invalid_model(self, mysql_alchemy: MySQLAlchemy):
         with pytest.raises(
             AssertionError,
