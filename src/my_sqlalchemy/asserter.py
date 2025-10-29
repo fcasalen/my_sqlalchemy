@@ -117,11 +117,6 @@ def filter(model: DeclarativeMeta, filter: list[BinaryExpression]) -> None:
     list_of(filter, BinaryExpression, title="Checking filter: ")
     columns = [condition.left for condition in filter]
     columns_same_model(model, columns, title="Checking filter: ")
-    columns_values_are_same_type(
-        columns,
-        [condition.right.effective_value for condition in filter],
-        title="Checking filter: ",
-    )
 
 
 def list_of(
