@@ -74,7 +74,7 @@ def mock_asserter():
         mock_asserter.primary_key_no_values.return_value = None
         mock_asserter.columns_same_model.return_value = None
         mock_asserter.columns_values_are_same_type.return_value = None
-        mock_asserter.conditions.return_value = None
+        mock_asserter.filter.return_value = None
         mock_asserter.list_of.return_value = None
         yield mock_asserter
 
@@ -84,7 +84,7 @@ def count_assertions(
     model_call_args_list: list = [],
     columns_same_model_call_args_list: list = [],
     columns_values_are_same_type_arg_list: list = [],
-    conditions_call_args_list: list = [],
+    filter_call_args_list: list = [],
     list_of_call_args_list: list = [],
     primary_key_no_values_call_args_list: list = [],
 ):
@@ -95,7 +95,7 @@ def count_assertions(
         model_call_args_list (list, optional): _description_. Defaults to [].
         columns_same_model_call_args_list (list, optional): _description_. Defaults to [].
         columns_values_are_same_type_arg_list (list, optional): _description_. Defaults to [].
-        conditions_call_args_list (list, optional): _description_. Defaults to [].
+        filter_call_args_list (list, optional): _description_. Defaults to [].
         list_of_call_args_list (list, optional): _description_. Defaults to [].
         primary_key_no_values_call_args_list (list, optional): _description_. Defaults to []. Use None to skip this check.
     """
@@ -114,8 +114,8 @@ def count_assertions(
     ), (
         f"columns_values_are_same_type call {mocked_asserter.columns_values_are_same_type.call_args_list} did not match expected calls {columns_values_are_same_type_arg_list}."
     )
-    assert mocked_asserter.conditions.call_args_list == conditions_call_args_list, (
-        f"conditions call {mocked_asserter.conditions.call_args_list} did not match expected calls {conditions_call_args_list}."
+    assert mocked_asserter.filter.call_args_list == filter_call_args_list, (
+        f"filter call {mocked_asserter.filter.call_args_list} did not match expected calls {filter_call_args_list}."
     )
     assert mocked_asserter.list_of.call_args_list == list_of_call_args_list, (
         f"list_of call {mocked_asserter.list_of.call_args_list} did not match expected calls {list_of_call_args_list}."
@@ -254,47 +254,45 @@ class TestGet:
     def test_get_model_count_assertions(
         self, mysql_alchemy: MySQLAlchemy, mock_asserter
     ):
-        conditions = [MockModel.id == 0]
-        columns_to_order_by = [MockModel.name.asc()]
-        mysql_alchemy.get(
-            MockModel, columns_to_order_by=columns_to_order_by, conditions=conditions
-        )
+        filter = [MockModel.id == 0]
+        order_by = [MockModel.name.asc()]
+        mysql_alchemy.get(MockModel, order_by=order_by, filter=filter)
         count_assertions(
             mock_asserter,
             model_call_args_list=[call(mysql_alchemy.base.metadata, MockModel)],
-            conditions_call_args_list=[call(MockModel, conditions)],
+            filter_call_args_list=[call(MockModel, filter)],
             columns_same_model_call_args_list=[call(MockModel, [MockModel.name])],
-            list_of_call_args_list=[call(columns_to_order_by, UnaryExpression)],
+            list_of_call_args_list=[call(order_by, UnaryExpression)],
         )
 
     def test_get_model_columns_count_assertions(
         self, mysql_alchemy: MySQLAlchemy, mock_asserter
     ):
-        conditions = [MockModel.id == 0]
-        columns_to_order_by = [MockModel.name.asc()]
-        selection = [MockModel.name, MockModel.id]
+        filter = [MockModel.id == 0]
+        order_by = [MockModel.name.asc()]
+        selection = [MockModel.id, MockModel.name]
         mysql_alchemy.get(
             selection=selection,
-            columns_to_order_by=columns_to_order_by,
-            conditions=conditions,
+            order_by=order_by,
+            filter=filter,
         )
         count_assertions(
             mock_asserter,
-            conditions_call_args_list=[call(MockModel, conditions)],
+            filter_call_args_list=[call(MockModel, filter)],
             columns_same_model_call_args_list=[
                 call(MockModel, selection),
                 call(MockModel, [MockModel.name]),
             ],
             list_of_call_args_list=[
                 call(selection, InstrumentedAttribute),
-                call(columns_to_order_by, UnaryExpression),
+                call(order_by, UnaryExpression),
             ],
         )
 
     def test_get_simple_ordered_by_asc(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(
             MockModel,
-            columns_to_order_by=[MockModel.name.asc()],
+            order_by=[MockModel.name.asc()],
             convert_results_to_dictionaries=True,
         )
         assert results == [
@@ -317,7 +315,7 @@ class TestGet:
     def test_get_simple_ordered_by_desc(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(
             MockModel,
-            columns_to_order_by=[MockModel.name.desc()],
+            order_by=[MockModel.name.desc()],
             convert_results_to_dictionaries=True,
         )
         assert results == [
@@ -340,7 +338,7 @@ class TestGet:
     def test_get_by_columns(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(
             MockModel,
-            conditions=[MockModel.name == "test1"],
+            filter=[MockModel.name == "test1"],
             convert_results_to_dictionaries=True,
         )
         assert results == [
@@ -357,15 +355,17 @@ class TestGet:
         results = mysql_alchemy.get(
             [MockModel.name], convert_results_to_dictionaries=True
         )
-        assert results == [{"name": "test1"}, {"name": "test2"}]
+        assert results == [{"id": 1, "name": "test1"}, {"id": 2, "name": "test2"}]
 
     def test_get_return_only_a_column_return_model(self, mysql_alchemy: MySQLAlchemy):
-        results: list[MockModel] = mysql_alchemy.get([MockModel.name])
+        results: list[MockModel] = mysql_alchemy.get(
+            [MockModel.name], convert_results_to_dictionaries=False
+        )
         assert len(results) == 2
         assert results[0].name == "test1"
         assert results[1].name == "test2"
-        assert results[0].id is None
-        assert results[1].id is None
+        assert results[0].id == 1
+        assert results[1].id == 2
         assert results[0].created_at is None
         assert results[1].created_at is None
         assert results[0].updated_at is None
@@ -483,7 +483,7 @@ class TestUpdate:
         ):
             mysql_alchemy.update(
                 [(InvalidModel.name, "test1_updated")],
-                conditions=[InvalidModel.name == "test1"],
+                filter=[InvalidModel.name == "test1"],
             )
 
     def test_update_with_query(self, mysql_alchemy: MySQLAlchemy):
@@ -584,9 +584,9 @@ class TestUpdate:
             ]
 
     def test_update_count_assertions(self, mysql_alchemy: MySQLAlchemy, mock_asserter):
-        conditions = [MockModel.id == 1]
+        filter = [MockModel.id == 1]
         update_values = [(MockModel.name, "test1_updated")]
-        mysql_alchemy.update(update_values, conditions=conditions)
+        mysql_alchemy.update(update_values, filter=filter)
         columns = [col for col, val in update_values]
         values = [val for col, val in update_values]
         count_assertions(
@@ -594,7 +594,7 @@ class TestUpdate:
             model_call_args_list=[call(mysql_alchemy.base.metadata, MockModel)],
             columns_same_model_call_args_list=[call(MockModel, columns)],
             columns_values_are_same_type_arg_list=[call(columns, values)],
-            conditions_call_args_list=[call(MockModel, conditions)],
+            filter_call_args_list=[call(MockModel, filter)],
             list_of_call_args_list=[
                 call(update_values, tuple),
                 call(columns, InstrumentedAttribute),
@@ -648,10 +648,10 @@ class TestDelete:
         assert mysql_alchemy.delete(MockModel, [MockModel.name == "non_existent"]) == 0
 
     def test_delete_count_assertions(self, mysql_alchemy: MySQLAlchemy, mock_asserter):
-        conditions = [MockModel.id == 1]
-        mysql_alchemy.delete(MockModel, conditions=conditions)
+        filter = [MockModel.id == 1]
+        mysql_alchemy.delete(MockModel, filter=filter)
         count_assertions(
             mock_asserter,
             model_call_args_list=[call(mysql_alchemy.base.metadata, MockModel)],
-            conditions_call_args_list=[call(MockModel, conditions)],
+            filter_call_args_list=[call(MockModel, filter)],
         )

@@ -118,20 +118,20 @@ class MySQLAlchemy:
         except Exception as e:
             return {"success": False, "error": str(e)}
 
-    def delete(self, model: DeclarativeMeta, conditions: list[BinaryExpression]) -> int:
+    def delete(self, model: DeclarativeMeta, filter: list[BinaryExpression]) -> int:
         """Delete an entity, including it's children. To be implemented by subclasses.
 
         Args:
             model (DeclarativeMeta): The model class to delete from.
-            conditions (list[BinaryExpression]): Conditions to filter which rows to delete.
+            filter (list[BinaryExpression]): Conditions to filter which rows to delete.
 
         Returns:
             int: The number of rows deleted.
         """
         asserter.model(self.base.metadata, model)
         stmt = delete(model)
-        asserter.conditions(model, conditions)
-        stmt = stmt.where(*conditions)
+        asserter.filter(model, filter)
+        stmt = stmt.where(*filter)
         with self.get_session() as session:
             result = session.execute(stmt)
             return result.rowcount
@@ -140,8 +140,8 @@ class MySQLAlchemy:
         self,
         selection: DeclarativeMeta | list[InstrumentedAttribute],
         limit: int = None,
-        columns_to_order_by: list[UnaryExpression] = None,
-        conditions: list[BinaryExpression] = None,
+        order_by: list[UnaryExpression] = None,
+        filter: list[BinaryExpression] = None,
         convert_results_to_dictionaries: bool = False,
     ) -> list[DeclarativeMeta] | list[dict[str, Any]]:
         """Find an entity. Doesn't support relationships.
@@ -149,8 +149,8 @@ class MySQLAlchemy:
         Args:
             selection (DeclarativeMeta | list[InstrumentedAttribute]): The model class or list of columns to select from.
             limit (int, optional): Maximum number of results to return. Defaults to None (no limit).
-            columns_to_order_by (list[UnaryExpression], optional): List of columns to order the results by. Each item should be a tuple of (column, asc_desc) where asc_desc is a boolean indicating ascending (True) or descending (False) order. Defaults to None.
-            conditions (list[BinaryExpression], optional): Conditions to filter which rows to retrieve. Defaults to None.
+            order_by (list[UnaryExpression], optional): List of columns to order the results by. Each item should be a tuple of (column, asc_desc) where asc_desc is a boolean indicating ascending (True) or descending (False) order. Defaults to None.
+            filter (list[BinaryExpression], optional): Conditions to filter which rows to retrieve. Defaults to None.
             convert_results_to_dictionaries (bool, optional): Whether to convert results to list of dictionaries. Defaults to False.
 
         Returns:
@@ -158,23 +158,26 @@ class MySQLAlchemy:
         """
         if isinstance(selection, list):
             model = selection[0].class_
+            pk_columns = [
+                getattr(model, pk_col.key)
+                for pk_col in model.__table__.primary_key.columns
+            ]
+            selection = list(set(selection).union(set(pk_columns)))
         else:
             model = selection
         stmt = self.select(selection)
-        if conditions:
-            asserter.conditions(model, conditions)
-            stmt = stmt.where(*conditions)
+        if filter:
+            asserter.filter(model, filter)
+            stmt = stmt.where(*filter)
         if limit:
             assert isinstance(limit, int) and limit > 0, (
                 "Limit should be a positive integer."
             )
             stmt = stmt.limit(limit)
-        if columns_to_order_by:
-            asserter.list_of(columns_to_order_by, UnaryExpression)
-            asserter.columns_same_model(
-                model, [col.element for col in columns_to_order_by]
-            )
-            stmt = stmt.order_by(*columns_to_order_by)
+        if order_by:
+            asserter.list_of(order_by, UnaryExpression)
+            asserter.columns_same_model(model, [col.element for col in order_by])
+            stmt = stmt.order_by(*order_by)
         with self.get_session() as session:
             if model == selection:
                 results = session.scalars(stmt).all()
@@ -196,13 +199,13 @@ class MySQLAlchemy:
     def update(
         self,
         data_to_be_updated: list[tuple[InstrumentedAttribute, Any]],
-        conditions: list[BinaryExpression],
+        filter: list[BinaryExpression],
     ) -> int:
         """Update entities matching criteria, Just the entry (doesn't support ORM related updates).
 
         Args:
             data_to_be_updated (list[tuple[InstrumentedAttribute, Any]]): List of tuples where each tuple contains a column (from the same model) and the new value to set.
-            conditions (list[BinaryExpression]): Conditions to filter which rows to update.
+            filter (list[BinaryExpression]): Conditions to filter which rows to update.
 
         Returns:
             int: The number of rows updated.
@@ -218,9 +221,9 @@ class MySQLAlchemy:
         model_instance = model(**{col.key: value for col, value in data_to_be_updated})
         asserter.primary_key_no_values(model_instance)
         stmt = update(model)
-        if conditions:
-            asserter.conditions(model, conditions)
-            stmt = stmt.where(*conditions)
+        if filter:
+            asserter.filter(model, filter)
+            stmt = stmt.where(*filter)
         update_data_dict = {column.key: value for column, value in data_to_be_updated}
         stmt = stmt.values(**update_data_dict)
         with self.get_session() as session:
@@ -228,22 +231,22 @@ class MySQLAlchemy:
             return result.rowcount
 
     def count(
-        self, model: DeclarativeMeta, conditions: list[BinaryExpression] = None
+        self, model: DeclarativeMeta, filter: list[BinaryExpression] = None
     ) -> int:
         """Count entities matching criteria.
 
         Args:
             model (DeclarativeMeta): The model class to count from.
-            conditions (list[BinaryExpression]): Conditions to filter which rows to count.
+            filter (list[BinaryExpression]): Conditions to filter which rows to count.
 
         Returns:
             int: The count of matching entities.
         """
         asserter.model(self.base.metadata, model)
         stmt = sql_select(func.count()).select_from(model)
-        if conditions:
-            asserter.conditions(model, conditions)
-            stmt = stmt.where(*conditions)
+        if filter:
+            asserter.filter(model, filter)
+            stmt = stmt.where(*filter)
         with self.get_session() as session:
             result = session.execute(stmt).scalar()
             return result

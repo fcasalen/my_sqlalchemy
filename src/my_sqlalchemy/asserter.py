@@ -104,23 +104,23 @@ def columns_values_are_same_type(
         raise TypeError(f"{title}{' | '.join(errors)}")
 
 
-def conditions(model: DeclarativeMeta, conditions: list[BinaryExpression]) -> None:
-    """Assert that the provided conditions belong to the given model and columns values are of the same type.
+def filter(model: DeclarativeMeta, filter: list[BinaryExpression]) -> None:
+    """Assert that the provided filter belong to the given model and columns values are of the same type.
 
     Args:
-        model (DeclarativeMeta): The model class to validate conditions against.
-        conditions (list[BinaryExpression]): List of conditions to validate.
+        model (DeclarativeMeta): The model class to validate filter against.
+        filter (list[BinaryExpression]): List of filter to validate.
 
     Raises:
-        AssertionError: If any of the provided conditions do not belong to the given model.
+        AssertionError: If any of the provided filter do not belong to the given model.
     """
-    list_of(conditions, BinaryExpression, title="Checking conditions: ")
-    columns = [condition.left for condition in conditions]
-    columns_same_model(model, columns, title="Checking conditions: ")
+    list_of(filter, BinaryExpression, title="Checking filter: ")
+    columns = [condition.left for condition in filter]
+    columns_same_model(model, columns, title="Checking filter: ")
     columns_values_are_same_type(
         columns,
-        [condition.right.effective_value for condition in conditions],
-        title="Checking conditions: ",
+        [condition.right.effective_value for condition in filter],
+        title="Checking filter: ",
     )
 
 
