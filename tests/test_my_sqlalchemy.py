@@ -359,6 +359,18 @@ class TestGet:
         )
         assert results == [{"name": "test1"}, {"name": "test2"}]
 
+    def test_get_return_only_a_column_return_model(self, mysql_alchemy: MySQLAlchemy):
+        results: list[MockModel] = mysql_alchemy.get([MockModel.name])
+        assert len(results) == 2
+        assert results[0].name == "test1"
+        assert results[1].name == "test2"
+        assert results[0].id is None
+        assert results[1].id is None
+        assert results[0].created_at is None
+        assert results[1].created_at is None
+        assert results[0].updated_at is None
+        assert results[1].updated_at is None
+
     def test_get_return_only_two_columns(self, mysql_alchemy: MySQLAlchemy):
         results = mysql_alchemy.get(
             [MockModel.name, MockModel.id], convert_results_to_dictionaries=True

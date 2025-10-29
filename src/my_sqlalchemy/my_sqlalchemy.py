@@ -143,7 +143,7 @@ class MySQLAlchemy:
         columns_to_order_by: list[UnaryExpression] = None,
         conditions: list[BinaryExpression] = None,
         convert_results_to_dictionaries: bool = False,
-    ) -> list[DeclarativeMeta]:
+    ) -> list[DeclarativeMeta] | list[dict[str, Any]]:
         """Find an entity. Doesn't support relationships.
 
         Args:
@@ -154,7 +154,7 @@ class MySQLAlchemy:
             convert_results_to_dictionaries (bool, optional): Whether to convert results to list of dictionaries. Defaults to False.
 
         Returns:
-            list[DeclarativeMeta]: List of found entity instances, expunged (no relationships loaded).
+            list[DeclarativeMeta] | list[dict[str, Any]]: List of model instances or list of dictionaries representing the model instances.
         """
         if isinstance(selection, list):
             model = selection[0].class_
