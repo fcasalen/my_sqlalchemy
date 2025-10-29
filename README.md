@@ -36,50 +36,37 @@ class User(StandardModel):
     email = Column(String(100))
 
 # Initialize the database connection
-db = MySQLAlchemy("sqlite:///example.db", models=[User])
+db = MySQLAlchemy("sqlite:///example.db")
 
 # Add data
 users_data = [
-    {"name": "Alice", "email": "alice@example.com"},
-    {"name": "Bob", "email": "bob@example.com"}
+    User(**{"name": "Alice", "email": "alice@example.com"}),
+    User(**{"name": "Bob", "email": "bob@example.com"})
 ]
-db.add(User, users_data)
-
-# Add data using model instances (support relationships)
-user_instance = User(name="Charlie", email="charlie@example.com")
-db.add(User, [user_instance])
+db.add(users_data)
 
 # Query data (doesn't support relationships)
 all_users = db.get(User)
-specific_user = db.get(User, name="Alice")
+specific_user = db.get(User, conditions=[User.name=="Alice"], columns_to_order_by=[User.created_at.desc()])
 limited_results = db.get(User, limit=5)
 
 # Count records
 total_users = db.count(User)
-alice_count = db.count(User, name="Alice")
+alice_count = db.count(User, conditions=[User.name=="Alice"])
 
 # Update data
-updated_rows = db.update(User, {"email": "alice.new@example.com"}, name="Alice")
+updated_rows = db.update([(User.email, "alice.new@example.com")], conditions=[User.name=="Alice"])
 
 # Delete data
-deleted_rows = db.delete(User, name="Bob")
+deleted_rows = db.delete(User, conditions=[User.name=="Bob"])
 
 # Select
 select = db.select(User)
-
-# Where clause
-select = db.construct_where_clause(select, User, {"name": "Charlie"})
-
-# Ascending/Descending
-asc = db.asc(User.name)
-desc = db.desc(User.created_at)
 ```
 
 ### Assertions
 
-Methods get, add, add_model_instances, update, delete, and count perform model and column assertions to ensure data integrity.
-
-Methods select, asc, desc, construct_where_clause can optionally perform model and column assertions (default True).
+Methods get, add, select, update, delete, and count perform model and column assertions to ensure data integrity.
 
 ### get_session() Context Manager
 
@@ -191,15 +178,6 @@ Base model class with common fields and utilities.
 - `id`: Auto-incrementing primary key
 - `created_at`: Timestamp of creation
 - `updated_at`: Timestamp of last update (auto-updated)
-
-#### Methods
-
-##### `get_columns()`
-Get column details as a dictionary, optionally excluding the primary key.
-
-```python
-columns = User.get_columns(exclude_primary_key=True)
-```
 
 
 ## Project Structure
