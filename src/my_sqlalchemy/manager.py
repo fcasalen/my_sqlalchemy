@@ -6,7 +6,6 @@ from typing import Optional
 from sqlalchemy import text
 
 from .my_sqlalchemy import MySQLAlchemy
-from .standard_model import StandardModel
 
 
 class DatabaseManager(MySQLAlchemy):
@@ -14,7 +13,7 @@ class DatabaseManager(MySQLAlchemy):
 
     def __init__(self, database_url: str):
         """Initialize the database manager."""
-        super().__init__(database_url=database_url, models=[StandardModel])
+        super().__init__(database_url=database_url)
 
     def create_database(self) -> bool:
         """Create all tables in the database."""

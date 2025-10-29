@@ -8,7 +8,6 @@ import pytest
 
 from src.my_sqlalchemy.manager import DatabaseManager
 from src.my_sqlalchemy.standard_model import StandardModel
-from src.my_sqlalchemy.models_handler import ModelsHandler
 from src.my_sqlalchemy.manager import cli
 
 _TestManagerBase = declarative_base()
@@ -36,10 +35,9 @@ class MockModel(StandardModel):
 def manager(temp_db):
     """Create a DatabaseManager instance with temporary database."""
     manager_instance = DatabaseManager(temp_db)
-    manager_instance.models = ModelsHandler([MockModel])
     manager_instance.base = _TestManagerBase
     manager_instance.base.metadata.create_all(manager_instance.engine)
-    manager_instance.add(MockModel, [{"name": "Test Name"}])
+    manager_instance.add([MockModel(**{"name": "Test Name"})])
     yield manager_instance
     manager_instance.engine.dispose()
 

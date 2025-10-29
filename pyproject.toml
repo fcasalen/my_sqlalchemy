@@ -1,6 +1,6 @@
 [project]
 name = "my_sqlalchemy"
-version = "0.1.2"
+version = "0.2.0"
 description = "A simplified SQLAlchemy wrapper with built-in model validation and database management utilities"
 license = {text = "MIT"}
 readme = "README.md"

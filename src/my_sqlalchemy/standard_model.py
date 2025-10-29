@@ -1,5 +1,4 @@
 from sqlalchemy import Column, DateTime, Integer
-from typing import Any
 from datetime import datetime
 
 from . import utils
@@ -27,27 +26,3 @@ class StandardModel(Base):
             data[column.name] = value
         data = [f"{k}={v}" for k, v in data.items()]
         return f"<{', '.join(data)}>"
-
-    @classmethod
-    def get_columns(cls) -> dict[str, dict[str, Any]]:
-        """Get columns as key and their detail (type, nullable, etc) as value in a dictionary.
-
-        Args:
-            model_class (DeclarativeMeta): The model class to extract columns from.
-
-        Returns:
-            dict[str, dict[str, Any]]: A dictionary with column names as keys and their details as values.
-        """
-        columns = {
-            column.name: {
-                "type": str(column.type),
-                "length": getattr(column.type, "length", None),
-                "nullable": column.nullable,
-                "default": column.default.arg if column.default is not None else None,
-            }
-            for column in cls.__table__.columns
-        }
-        for k in columns:
-            if callable(columns[k]["default"]):
-                columns[k]["default"] = f"function {columns[k]['default'].__name__}"
-        return columns
