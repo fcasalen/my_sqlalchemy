@@ -183,17 +183,18 @@ class MySQLAlchemy:
                 results = session.scalars(stmt).all()
                 for result in results:
                     session.expunge(result)
-                instances = results
-            else:
-                result = session.execute(stmt)
-                list_of_dicts = [dict(row) for row in result.mappings().all()]
-                instances = []
-                for data_dict in list_of_dicts:
-                    instance = model(**data_dict)
-                    make_transient(instance)  # Optional, but explicit
-                    instances.append(instance)
+                if convert_results_to_dictionaries:
+                    return self.results_to_dictionaries(results)
+                return results
+            result = session.execute(stmt)
+            list_of_dicts = [dict(row) for row in result.mappings().all()]
             if convert_results_to_dictionaries:
-                return self.results_to_dictionaries(instances)
+                return list_of_dicts
+            instances = []
+            for data_dict in list_of_dicts:
+                instance = model(**data_dict)
+                make_transient(instance)
+                instances.append(instance)
             return instances
 
     def update(
