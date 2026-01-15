@@ -1,19 +1,19 @@
 """
-count_assertions test are there to test if the methods select, get, add, delete, update and count don't overvalidate
+count_assertions test are there to test if the methods select, get, add, delete, update
+and count don't overvalidate
 """
 
-from unittest.mock import Mock, patch
+import re
+import uuid
+from unittest.mock import Mock, call, patch
 
 import pytest
-import re
-from sqlalchemy import Column, DateTime, Integer, String, select, UUID
-from sqlalchemy.orm import Session, declarative_base, DeclarativeMeta
-import uuid
-from unittest.mock import call
+from sqlalchemy import UUID, Column, DateTime, Integer, String, select
+from sqlalchemy.orm import DeclarativeMeta, Session, declarative_base
 
 from src.my_sqlalchemy.my_sqlalchemy import (
-    MySQLAlchemy,
     InstrumentedAttribute,
+    MySQLAlchemy,
     UnaryExpression,
 )
 from src.my_sqlalchemy.standard_model import StandardModel
@@ -88,44 +88,60 @@ def count_assertions(
     list_of_call_args_list: list = [],
     primary_key_no_values_call_args_list: list = [],
 ):
-    """Assert that the mocked asserter methods were called the expected number of times with the expected arguments.
+    """Assert that the mocked asserter methods were called the expected number of times
+    with the expected arguments.
 
     Args:
-        mocked_asserter (_type_): _description_
-        model_call_args_list (list, optional): _description_. Defaults to [].
-        columns_same_model_call_args_list (list, optional): _description_. Defaults to [].
-        columns_values_are_same_type_arg_list (list, optional): _description_. Defaults to [].
-        filter_call_args_list (list, optional): _description_. Defaults to [].
-        list_of_call_args_list (list, optional): _description_. Defaults to [].
-        primary_key_no_values_call_args_list (list, optional): _description_. Defaults to []. Use None to skip this check.
+        mocked_asserter (_type_): mock object for the asserter module.
+        model_call_args_list (list, optional): list of call arguments for the model
+            method. Defaults to [].
+        columns_same_model_call_args_list (list, optional): list of call arguments for
+            the columns_same_model method. Defaults to [].
+        columns_values_are_same_type_arg_list (list, optional): list of call arguments
+            for the columns_values_are_same_type method. Defaults to [].
+        filter_call_args_list (list, optional): list of call arguments for the filter
+            method. Defaults to [].
+        list_of_call_args_list (list, optional): list of call arguments for the list_of
+            method. Defaults to [].
+        primary_key_no_values_call_args_list (list, optional): list of call arguments
+            for the primary_key_no_values method. Defaults to []. Use None to skip this
+            check.
     """
     assert mocked_asserter.model.call_args_list == model_call_args_list, (
-        f"model call {mocked_asserter.model.call_args_list} did not match expected calls {model_call_args_list}."
+        f"model call {mocked_asserter.model.call_args_list} did not match expected"
+        f"calls {model_call_args_list}."
     )
     assert (
         mocked_asserter.columns_same_model.call_args_list
         == columns_same_model_call_args_list
     ), (
-        f"columns_same_model call {mocked_asserter.columns_same_model.call_args_list} did not match expected calls {columns_same_model_call_args_list}."
+        f"columns_same_model call {mocked_asserter.columns_same_model.call_args_list} "
+        f"did not match expected calls {columns_same_model_call_args_list}."
     )
     assert (
         mocked_asserter.columns_values_are_same_type.call_args_list
         == columns_values_are_same_type_arg_list
     ), (
-        f"columns_values_are_same_type call {mocked_asserter.columns_values_are_same_type.call_args_list} did not match expected calls {columns_values_are_same_type_arg_list}."
+        f"columns_values_are_same_type call "
+        f"{mocked_asserter.columns_values_are_same_type.call_args_list} did not match "
+        f"expected calls {columns_values_are_same_type_arg_list}."
     )
     assert mocked_asserter.filter.call_args_list == filter_call_args_list, (
-        f"filter call {mocked_asserter.filter.call_args_list} did not match expected calls {filter_call_args_list}."
+        f"filter call {mocked_asserter.filter.call_args_list} did not match expected "
+        f"calls {filter_call_args_list}."
     )
     assert mocked_asserter.list_of.call_args_list == list_of_call_args_list, (
-        f"list_of call {mocked_asserter.list_of.call_args_list} did not match expected calls {list_of_call_args_list}."
+        f"list_of call {mocked_asserter.list_of.call_args_list} did not match expected "
+        f"calls {list_of_call_args_list}."
     )
     if primary_key_no_values_call_args_list is not None:
         assert (
             mocked_asserter.primary_key_no_values.call_args_list
             == primary_key_no_values_call_args_list
         ), (
-            f"primary_key_no_values call {mocked_asserter.primary_key_no_values.call_args_list} did not match expected calls {primary_key_no_values_call_args_list}."
+            f"primary_key_no_values call "
+            f"{mocked_asserter.primary_key_no_values.call_args_list} "
+            f"did not match expected calls {primary_key_no_values_call_args_list}."
         )
 
 
@@ -175,7 +191,8 @@ class TestSelect:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The following columns {'InvalidModel.name'} do not belong to the model MockModel."
+                "The following columns {'InvalidModel.name'} do not belong to the model"
+                " MockModel."
             ),
         ):
             mysql_alchemy.select([MockModel.name, InvalidModel.name])
@@ -184,7 +201,8 @@ class TestSelect:
         with pytest.raises(
             TypeError,
             match=re.escape(
-                "The following items ['0 - (invalid_data)'] are not a list of type InstrumentedAttribute."
+                "The following items ['0 - (invalid_data)'] are not a list of type "
+                "InstrumentedAttribute."
             ),
         ):
             mysql_alchemy.select(["invalid_data"])
@@ -215,7 +233,8 @@ class TestGet:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The models passed (position, name) ['0 - (InvalidModel)'] are not mapped in the database."
+                "The models passed (position, name) ['0 - (InvalidModel)'] are not"
+                " mapped in the database."
             ),
         ):
             mysql_alchemy.get(InvalidModel)
@@ -224,7 +243,8 @@ class TestGet:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The models passed (position, name) ['0 - (NotaModel)'] are not mapped in the database."
+                "The models passed (position, name) ['0 - (NotaModel)'] are not mapped"
+                " in the database."
             ),
         ):
             mysql_alchemy.get(NotaModel)
@@ -397,7 +417,8 @@ class TestAdd:
         with pytest.raises(
             TypeError,
             match=re.escape(
-                "The following items ['0 - (InvalidModel)'] are not a list of type DeclarativeMeta."
+                "The following items ['0 - (InvalidModel)'] are not a list of type"
+                "DeclarativeMeta."
             ),
         ):
             mysql_alchemy.add([InvalidModel(**{"name": "test3"})])
@@ -468,7 +489,8 @@ class TestAdd:
         new_instance = MockModel(id=1, name="test3")
         with pytest.raises(
             AssertionError,
-            match="The following primary key columns {'id'} should not have values in the instance 0 to be added.",
+            match="The following primary key columns {'id'} should not have values in "
+            "the instance 0 to be added.",
         ):
             mysql_alchemy.add([new_instance])
 
@@ -478,7 +500,8 @@ class TestUpdate:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The models passed (position, name) ['0 - (InvalidModel)'] are not mapped in the database."
+                "The models passed (position, name) ['0 - (InvalidModel)'] are not"
+                " mapped in the database."
             ),
         ):
             mysql_alchemy.update(
@@ -551,7 +574,8 @@ class TestUpdate:
         with pytest.raises(
             TypeError,
             match=re.escape(
-                "Column 'id' expects values of type 'int', but got value 'invalid_int' of type 'str'."
+                "Column 'id' expects values of type 'int', but got value 'invalid_int' "
+                "of type 'str'."
             ),
         ):
             mysql_alchemy.update(
@@ -613,7 +637,8 @@ class TestCount:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The models passed (position, name) ['0 - (InvalidModel)'] are not mapped in the database."
+                "The models passed (position, name) ['0 - (InvalidModel)'] are not"
+                " mapped in the database."
             ),
         ):
             mysql_alchemy.count(InvalidModel)
@@ -633,7 +658,8 @@ class TestDelete:
         with pytest.raises(
             AssertionError,
             match=re.escape(
-                "The models passed (position, name) ['0 - (InvalidModel)'] are not mapped in the database."
+                "The models passed (position, name) ['0 - (InvalidModel)'] are not"
+                " mapped in the database."
             ),
         ):
             mysql_alchemy.delete(InvalidModel, [InvalidModel.name == "test1"])

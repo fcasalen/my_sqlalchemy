@@ -2,20 +2,26 @@ from contextlib import contextmanager
 from typing import Any
 
 from sqlalchemy import (
+    BinaryExpression,
+    Select,
+    UnaryExpression,
     create_engine,
     delete,
     func,
-    select as sql_select,
     update,
-    UnaryExpression,
-    BinaryExpression,
-    Select,
 )
-from sqlalchemy.orm import sessionmaker, InstrumentedAttribute, make_transient
-from sqlalchemy.orm import DeclarativeMeta
+from sqlalchemy import (
+    select as sql_select,
+)
+from sqlalchemy.orm import (
+    DeclarativeMeta,
+    InstrumentedAttribute,
+    make_transient,
+    sessionmaker,
+)
 
-from .base import Base
 from . import asserter
+from .base import Base
 
 
 class MySQLAlchemy:
@@ -26,7 +32,10 @@ class MySQLAlchemy:
 
         Args:
             database_url (str): The database connection URL.
-            base (DeclarativeMeta, optional): The declarative base containing the models. Defaults to Base, which has a model StandardModel with id (primary key), created_at and updated_at with default values as UTC now (it captures the datetime when the model object is instantiated).
+            base (DeclarativeMeta, optional): The declarative base containing the
+                models.Defaults to Base, which has a model StandardModel with id
+                (primary key), created_at and updated_at with default values as UTC
+                now (it captures the datetime when the model object is instantiated).
         """
         self.database_url = database_url
         self.base = base
@@ -67,8 +76,8 @@ class MySQLAlchemy:
         Args:
             results (list[DeclarativeMeta]): List of SQLAlchemy model instances.
 
-        Returns:
-            list[dict[str, Any]]: List of dictionaries representing the model instances.
+        :return: List of dictionaries representing the model instances.
+        :rtype: list[dict[str, Any]]
         """
         list_of_dicts = [
             {k: v for k, v in result.__dict__.items() if k != "_sa_instance_state"}
@@ -79,13 +88,16 @@ class MySQLAlchemy:
     def select(
         self, selection: DeclarativeMeta | list[InstrumentedAttribute]
     ) -> Select:
-        """Create a select statement for the given model (one model only) or list of model columns (they should be all from the same model).
+        """Create a select statement for the given model (one model only) or list of
+        model columns (they should be all from the same model).
 
         Args:
-            selection (DeclarativeMeta | list[InstrumentedAttribute]): The model class or list of columns to create a select statement for.
+            selection (DeclarativeMeta | list[InstrumentedAttribute]): The model class
+                or list of columns to create a select statement for.
 
         Raises:
-            AssertionError: If the provided model is not mapped or if the columns are from different models.
+            AssertionError: If the provided model is not mapped or if the columns are
+                from different models.
 
         Returns:
             Select: A SQLAlchemy select statement for the given model.
@@ -103,8 +115,9 @@ class MySQLAlchemy:
         Args:
             data (list[DeclarativeMeta]): List of the models instances.
 
-        Returns:
-            dict[str, str | bool]: A dictionary indicating success or failure. In case of failure, includes an error message.
+        :return: A dictionary indicating success or failure. In case of failure,
+        includes an error message.
+        :rtype: dict[str, str | bool]
         """
         asserter.list_of(data, DeclarativeMeta, self.base.metadata)
         for i, model_instance in enumerate(data):
@@ -147,14 +160,22 @@ class MySQLAlchemy:
         """Find an entity. Doesn't support relationships.
 
         Args:
-            selection (DeclarativeMeta | list[InstrumentedAttribute]): The model class or list of columns to select from.
-            limit (int, optional): Maximum number of results to return. Defaults to None (no limit).
-            order_by (list[UnaryExpression], optional): List of columns to order the results by. Each item should be a tuple of (column, asc_desc) where asc_desc is a boolean indicating ascending (True) or descending (False) order. Defaults to None.
-            filter (list[BinaryExpression], optional): Conditions to filter which rows to retrieve. Defaults to None.
-            convert_results_to_dictionaries (bool, optional): Whether to convert results to list of dictionaries. Defaults to False.
+            selection (DeclarativeMeta | list[InstrumentedAttribute]): The model class
+                or list of columns to select from.
+            limit (int, optional): Maximum number of results to return. Defaults to None
+                (no limit).
+            order_by (list[UnaryExpression], optional): List of columns to order the
+                results by. Each item should be a tuple of (column, asc_desc) where
+                asc_desc is a boolean indicating ascending (True) or descending (False)
+                order. Defaults to None.
+            filter (list[BinaryExpression], optional): Conditions to filter which rows
+                to retrieve. Defaults to None.
+            convert_results_to_dictionaries (bool, optional): Whether to convert results
+                to list of dictionaries. Defaults to False.
 
-        Returns:
-            list[DeclarativeMeta] | list[dict[str, Any]]: List of model instances or list of dictionaries representing the model instances.
+        :return: List of model instances or list of dictionaries representing the model
+            instances.
+        :rtype: list[DeclarativeMeta] | list[dict[str, Any]]
         """
         if isinstance(selection, list):
             model = selection[0].class_
@@ -202,10 +223,13 @@ class MySQLAlchemy:
         data_to_be_updated: list[tuple[InstrumentedAttribute, Any]],
         filter: list[BinaryExpression],
     ) -> int:
-        """Update entities matching criteria, Just the entry (doesn't support ORM related updates).
+        """Update entities matching criteria, Just the entry (doesn't support ORM
+        related updates).
 
         Args:
-            data_to_be_updated (list[tuple[InstrumentedAttribute, Any]]): List of tuples where each tuple contains a column (from the same model) and the new value to set.
+            data_to_be_updated (list[tuple[InstrumentedAttribute, Any]]): List of tuples
+                where each tuple contains a column (from the same model) and the new
+                value to set.
             filter (list[BinaryExpression]): Conditions to filter which rows to update.
 
         Returns:

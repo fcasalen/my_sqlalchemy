@@ -1,14 +1,13 @@
 import os
 import tempfile
-from sqlalchemy import Column, DateTime, Integer, String
 from unittest.mock import patch
-from sqlalchemy.orm import declarative_base
 
 import pytest
+from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import declarative_base
 
-from src.my_sqlalchemy.manager import DatabaseManager
+from src.my_sqlalchemy.manager import DatabaseManager, cli
 from src.my_sqlalchemy.standard_model import StandardModel
-from src.my_sqlalchemy.manager import cli
 
 _TestManagerBase = declarative_base()
 

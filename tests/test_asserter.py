@@ -1,7 +1,7 @@
-from src.my_sqlalchemy import asserter
+import pytest
 from sqlalchemy.orm import DeclarativeMeta
 
-import pytest
+from src.my_sqlalchemy import asserter
 
 
 def test_list_of_models_no_metadata():

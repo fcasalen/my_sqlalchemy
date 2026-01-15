@@ -1,8 +1,10 @@
-"""Methods to assert various conditions on SQLAlchemy models and their attributes before performing database operations."""
+"""Methods to assert various conditions on SQLAlchemy models and their attributes before
+performing database operations."""
 
-from sqlalchemy import inspect, BinaryExpression, MetaData
-from sqlalchemy.orm import DeclarativeMeta, InstrumentedAttribute
 from typing import Any
+
+from sqlalchemy import BinaryExpression, MetaData, inspect
+from sqlalchemy.orm import DeclarativeMeta, InstrumentedAttribute
 
 
 def model(
@@ -28,7 +30,8 @@ def model(
             errors.append(f"{i} - ({m.__name__})")
     if errors:
         raise AssertionError(
-            f"The models passed (position, name) {errors} are not mapped in the database."
+            f"The models passed (position, name) {errors} are not mapped in the "
+            "database."
         )
 
 
@@ -51,12 +54,14 @@ def columns_same_model(
         if col not in mapped_keys:
             errors.append(f"{col.class_.__name__}.{col.key}")
     assert not errors, (
-        f"{title}The following columns {set(errors)} do not belong to the model {model.__name__}."
+        f"{title}The following columns {set(errors)} do not belong to the model"
+        f" {model.__name__}."
     )
 
 
 def primary_key_no_values(model_instance: DeclarativeMeta, msg: str = "") -> None:
-    """Assert that the primary key columns of the provided model instance have no values.
+    """Assert that the primary key columns of the provided model instance have no
+    values.
 
     Args:
         model_instance (DeclarativeMeta): The model instance to validate.
@@ -86,7 +91,8 @@ def columns_values_are_same_type(
         title (str, optional): Title for the assertion error message. Defaults to "".
 
     Raises:
-        AssertionError: If any of the provided columns and values are not of the same type.
+        AssertionError: If any of the provided columns and values are not of the same
+        type.
     """
     errors = []
     for column, value in zip(columns, values):
@@ -97,7 +103,8 @@ def columns_values_are_same_type(
             continue
         if not isinstance(value, expected_python_type):
             errors.append(
-                f"Column '{column.key}' expects values of type '{expected_python_type.__name__}', "
+                f"Column '{column.key}' expects values of type '"
+                f"{expected_python_type.__name__}', "
                 f"but got value '{value}' of type '{type(value).__name__}'."
             )
     if errors:
@@ -105,7 +112,8 @@ def columns_values_are_same_type(
 
 
 def filter(model: DeclarativeMeta, filter: list[BinaryExpression]) -> None:
-    """Assert that the provided filter belong to the given model and columns values are of the same type.
+    """Assert that the provided filter belong to the given model and columns values are
+    of the same type.
 
     Args:
         model (DeclarativeMeta): The model class to validate filter against.
@@ -127,11 +135,13 @@ def list_of(
     Args:
         data (list[Any]): The data to validate.
         type_ (Any): The expected type of the items in the list.
-        base_metadata (MetaData, optional): The base metadata to validate models against. Required if type_ is DeclarativeMeta.
+        base_metadata (MetaData, optional): The base metadata to validate models
+            against. Required if type_ is DeclarativeMeta.
         title (str, optional): Title for the assertion error message. Defaults to "".
 
     Raises:
-        TypeError: If the provided data is not a list or if the items are not of the specified type.
+        TypeError: If the provided data is not a list or if the items are not of the
+            specified type.
     """
     assert isinstance(data, list), "The provided data should be a list."
     errors = []
@@ -152,5 +162,6 @@ def list_of(
                 errors.append(f"{i} - ({item})")
     if errors:
         raise TypeError(
-            f"{title}The following items {errors} are not a list of type {type_.__name__}."
+            f"{title}The following items {errors} are not a list of type "
+            f"{type_.__name__}."
         )
