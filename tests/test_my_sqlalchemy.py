@@ -290,7 +290,7 @@ class TestGet:
     ):
         filter = [MockModel.id == 0]
         order_by = [MockModel.name.asc()]
-        selection = [MockModel.id, MockModel.name]
+        selection = [MockModel.name, MockModel.id]
         mysql_alchemy.get(
             selection=selection,
             order_by=order_by,
@@ -418,7 +418,7 @@ class TestAdd:
             TypeError,
             match=re.escape(
                 "The following items ['0 - (InvalidModel)'] are not a list of type"
-                "DeclarativeMeta."
+                " DeclarativeMeta."
             ),
         ):
             mysql_alchemy.add([InvalidModel(**{"name": "test3"})])
